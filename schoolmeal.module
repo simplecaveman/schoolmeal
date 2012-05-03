@@ -1,0 +1,768 @@
+<?php
+
+/**
+ * @file
+ * Needed custom fiunctionality for the KCSOS online school-site meal order entry system.
+ */
+
+/**
+ * Implementation of hook_menu
+ *
+ */
+function schoolmeal_menu() {
+	$items = array();
+	$items['district'] = array (
+		'title' => 'District order form',
+		'page callback' => 'schoolmeal_site_order_page',
+		'access callback' => TRUE,
+		'type' => MENU_NORMAL_ITEM,
+		'page arguments' => array (1),
+	);
+
+	$items['admin/config/schoolmeal'] = array(
+		'title' => 'Schoolmeal configuration options',
+		'description' => 'Schoolmeal configuration options',
+		'position' => 'right',
+		'weight' => 100,
+		'page callback' => 'system_admin_menu_block_page',
+		'access arguments' => array('administer site configuration'),
+		'file' => 'system.admin.inc',
+		'file path' => drupal_get_path('module', 'system'),
+	 );
+
+	$items['admin/config/schoolmeal/holidays'] = array (
+		'title' => 'School holiday dates',
+		'description' => 'The Schoolmeal system needs to know what days are holidays so that orders are not required for those days',
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('schoolmeal_admin_holidays_form'),
+		'access arguments' => array('administer schoolmeal'),
+		'access callback' => TRUE,
+		'type' => MENU_NORMAL_ITEM,
+		'file' => 'schoolmeal.module',
+		'file path' => drupal_get_path('module', 'schoolmeal'),
+	);
+	return $items;
+}
+
+function schoolmeal_permission() {
+  return array(
+    'administer schoolmeal' => array(
+      'title' => t('Administer Schoolmeal settings'),
+    	),
+    'enter district orders' => array(
+    	'title' => t('Enter district orders'),
+    	),
+    );
+}
+
+function schoolmeal_theme() {
+	$path = drupal_get_path('module', 'schoolmeal').'/templates';
+	return array(
+		'schoolmeal_site_order_form' => array (
+			'render element' => 'form',
+			'file' => 'theme.inc',
+		),
+		'schoolmeal_site_order_summary' => array(
+			'file' => 'theme.inc'
+		),
+		'district_order_summary_cell' => array(
+			'template' => 'district-order-summary-cell',
+			'variables' => array('max' => null, 'count' => null, 'cctr' => null),
+			'path' => $path,
+		),
+		'transport_sheet_calendar' => array(
+			'template' => 'transport-sheet-calendar',
+			'variables' => array('days' => array()),
+			'path' => $path,
+		),
+		
+	);
+}
+
+function schoolmeal_preprocess_schoolmeal_site_order_form (&$variables) {
+	$variables['hello_kitty'] = 'hello there kitty';
+}
+
+// function schoolmeal_menu_get_item_alter (&$router_item, $path, $original_map) {
+// 	global $user;
+// 	
+// 	// if you are a district user
+// 		// you get your district order/summary screen
+// 	// if you are 
+// 			
+// 	
+// 	
+// 	if($path == 'district') {
+// 		if (in_array('order entry', array_values($user->roles))) {
+// 			//dsm($router_item);
+// 			$router_item['page_callback'] = 'schoolmeal_kitchen_summary';
+// 			
+// 		} else {
+// 			//dsm($router_item);
+// 		}
+// 	}
+// }
+
+/**
+ * Admin section form for entering KCSOS holidays
+ *
+ */
+function schoolmeal_admin_holidays_form() {
+	$form = array();
+	$default = variable_get('schoolmeal_holidays', '');
+	$form['schoolmeal_holidays'] = array (
+		'#type' => 'textarea',
+		'#cols' => 20,
+		'#rows' => 3,
+		'#resizable' => FALSE,
+		'#title' => 'Input scheduled holidays',
+		'#description' => 'Input dates as MM/DD/YYY - like this: 02/13/2012, 02/20/2012 ... Be sure to include the leading zeros where needed, like the provided example.',
+		'#default_value' => $default,
+	);
+	return system_settings_form($form);
+}
+
+/**
+ * schoolmeal_admin_holidays_form_validate()
+ *
+ * Validate the holidays form entries
+ */
+function schoolmeal_admin_holidays_form_validate ($form, &$form_state) {
+	$fl_error = FALSE;
+	$holiday_array = explode (',', $form_state['values']['schoolmeal_holidays']);
+	// enough dashes?
+	foreach ($holiday_array as $item) {
+		$dash_count = substr_count ($item, '/');			
+		if ($dash_count < 2) {
+			// a properly formatted entry will have 2 dashes
+			$fl_error = true;
+		}
+		$date_parts = explode('/', $item);
+		// now break down each item
+		foreach ($date_parts as $part) {
+			$clean = trim($part);
+			// each date part in integer form?
+			if (preg_match("/^\d+$/", $clean) == 0) {
+				$fl_error = true;
+			}
+		}
+		$month_trim = trim($date_parts[0]);
+		switch (true) {
+			// only the first pair input may have a leading space
+			case (strlen($month_trim) <> 2):
+			case (strlen($date_parts[1]) <> 2):
+			case (strlen($date_parts[2]) > 4):
+				$fl_error = true;
+			break;
+		}
+		// if there is a previous failure - this function will make a php error
+		if (!$fl_error) {
+			if (!checkdate($date_parts[0], $date_parts[1], $date_parts[2])) {
+				$fl_error = true;
+			}
+		}
+	}
+	if ($fl_error) {
+		form_set_error('schoolmeal_holidays', t('Each date entry must be formatted exactly like this: 12/25/2012 or 04/06/2012. Use only digits and dashes. Seperate dates with a comma and a space like this: 12-24-2012, 12-25-2012. Be sure to include leading zeros like in this example: 04-06-2012'));
+	}
+}
+
+/**
+ * Admin section form for entering The types of meal programs
+ * to appear 
+ *
+ */
+function schoolmeal_admin_meal_types_form() {
+	$form = array();
+	
+}
+
+/**
+ * Determine what ordering days are available as of today.
+ * 
+ * Return a keyed array like [available date] => 0
+ *
+ * The value will be used in later processing to determine
+ * if a matching delivery date has already been created 
+ * for this available delivery order date. The order nid will
+ * replace the zero if a matchi is found.
+ * 
+ */
+function schoolmeal_valid_order_days () {
+	$date_array = array();
+	$count = 1;
+	$start_date = strtotime('now');
+	$schoolmeal_holidays = variable_get('schoolmeal_holidays', '');
+	$holidays_array = explode(',', $schoolmeal_holidays);
+	$holidays_time_array = array ();
+	foreach ($holidays_array as $value) {
+		$holidays_time_array[] = strtotime($value);
+	}
+	do {
+		$next_day = strtotime('today +'.$count.' days', $start_date);
+		$week_day_number = date("N", $next_day);
+		if ($week_day_number <= 5) {	
+			if (!in_array($next_day, $holidays_time_array)) {
+				$date_array[$next_day] = 0;
+			}
+		}
+		$count++;
+	} while (count($date_array) < 2);
+	return ($date_array);
+}
+
+//$query->where('EXTRACT(DAY FROM date) = :day', array(':day' => '20'));
+
+/**
+ * schoolmeal_site_order_page()
+ * 
+ * @parameter $site_id
+ * Ties us to a specific school site
+ *
+ * Order form will be rendered for a specific district based upon current login,
+ * unless the id is supplied here.
+ */
+function schoolmeal_site_order_page($site_id = null) {
+	global $user;
+
+	// integer input only please
+	if (!$site_id == null) {
+		if (preg_match("/^\d+$/", $site_id) == 0) {
+			return drupal_not_found();
+		}
+		// only kitchen admins can add in a site id to the path
+		if (!in_array('kitchen admin', $user->roles)) {
+			return drupal_not_found();
+		}		
+	} else {
+		// just grab the user id from the user profile
+		//$user_fields = user_load($user->uid);
+		$profile = profile2_load_by_user($user->uid);
+		if (count($profile) == 0) {
+			return drupal_not_found();
+		}
+		$site_id = $profile['main']->field_school_reference['und'][0]['nid'];
+	}
+
+	/** Now figure out what the next two order days are relative to today,
+	 * and then look those dates up for this site to see if either or both
+	 * days have an associated order already.
+	 */
+	$order_days = schoolmeal_valid_order_days ();
+	$output = array();
+	foreach ($order_days as $key => $value) {
+		$day = date ('d', $key);
+		$month = date ('m', $key);
+		$year = date ('Y', $key);
+		//dsm($day.'-'.$month.'-'.$year);
+		$query = db_select('node', 'n');
+		$query->join ('field_data_field_delivery_date', 'delivery', 
+			'n.nid = delivery.entity_id 
+			AND EXTRACT(YEAR from delivery.field_delivery_date_value) = :year
+			AND EXTRACT(MONTH from delivery.field_delivery_date_value) = :month
+			AND EXTRACT(DAY from delivery.field_delivery_date_value) = :day',
+			array (':year' => $year, ':month' => $month, ':day' => $day));
+		$query->leftjoin ('field_data_field_school_reference', 'schoolref', 'n.nid = schoolref.entity_id
+			AND schoolref.field_school_reference_nid = :site_id',
+			array (':site_id' => $site_id));	
+		$query->fields ('n', array ('nid'));
+		$query->fields ('delivery', array ('field_delivery_date_value'));	
+		$result = $query->execute();
+		foreach($result as $row) {
+			$order_days[strtotime($row->field_delivery_date_value)] = $row->nid;
+		}
+	}
+	//dsm ($order_days);
+	$tabs = array ();
+	foreach ($order_days as $key => $value) {
+		if ($value == 0) {
+			$output = drupal_get_form('schoolmeal_site_order_form', $site_id, $key);
+			
+		} else {
+			$output = schoolmeal_district_order_summary ($site_id, $value);
+		}
+		$tabs[] = array(
+			'title' => date ('m-d-Y', $key),
+			'contents' => $output, // Custom tabs must have a contents property.
+			'weight' => 0
+		);
+	}
+	
+
+	
+	$overrides = array('ajax' => 0, 'style' => 'Basic'); // Override some of the settings for the QT instance.
+	$htmltext = quicktabs_build_quicktabs('site_orders', $overrides, $tabs);
+	drupal_add_css(drupal_get_path('module', 'schoolmeal') . '/schoolmeal.css');
+	return $htmltext;
+}
+
+/**
+ * 
+ * 
+ * 
+ */
+
+
+
+/**
+ * The main district order form
+ *
+ * Downstream we depend on a specific order of teacher -> count,
+ * teacher -> cctr, teacher -> prep, next_teacher -> count ...
+ * 
+ * Anything done here or in the posting mechanism that might cause 
+ * this order to shift would create problems downstream in sumary 
+ * displays of this data.
+ *
+ */
+function schoolmeal_site_order_form ($form, &$form_state) {
+	$school_site_nid = $form_state['build_info']['args'][0];
+	$delivery_date = $form_state['build_info']['args'][1];
+	
+	$view = views_get_view ('site_teacher_list');
+	$view->set_arguments ($school_site_nid);
+	$view->execute ();
+	$meals = array ('breakfast','snack','lunch');
+	$form = array ();
+	//dsm ($view->result);
+	foreach ($view->result as $teacher) {
+ 		foreach ($meals as $meal) {
+ 			$nid = $teacher->nid;
+ 			$name = check_plain ($teacher->node_title);
+ 			$prop = 'field_field_'.$meal.'_max';
+ 			$max_array = $teacher->$prop;
+ 							
+ 			$max = $max_array[0]['raw']['value'];
+ 			// dsm ($max);
+ 			$prefix = 'order_'.$nid.'_'.$name.'_'.$meal;
+			$form['max_'.$nid.'_'.$meal] = array (
+ 				'#type' => 'markup',
+ 				'#markup' => t('Max: ').check_plain($max),
+ 			);
+ 			$form[$prefix.'_count'] = array (
+ 				'#type' => 'textfield',
+ 				'#title' => 'Count',
+ 				'#size' => 2,
+ 				'#attributes' => array('class' => array('district_order_input')),
+ 				'#default_value' => 3,
+ 			);
+ 			$form[$prefix.'_cctr'] = array (
+ 				'#type' => 'textfield',
+ 				'#title' => 'cctr',
+ 				'#size' => 2,
+ 				'#attributes' => array('class' => array('district_order_input')),
+ 				'#default_value' => 3,
+ 			);
+ 			$form[$prefix.'_prep'] = array (
+ 				'#type' => 'textfield',
+ 				'#title' => 'prep',
+ 				'#size' => 2,
+ 				'#attributes' => array('class' => array('district_order_input')),
+ 				'#default_value' => 3,
+ 			);
+ 		}
+	}
+	$form['field_school_reference'] = array (
+		'#type' => 'hidden',
+		'#value' => $school_site_nid,
+	);
+	$form['delivery_date'] = array (
+		'#type' => 'hidden',
+		'#value' => $delivery_date,
+	);
+	$form['delivery_date_markup'] = array (
+		'#type' => 'markup',
+		'#markup' => date('m/d/Y', $delivery_date),
+	);
+	
+	/** 
+	 * And now for something completely different...
+	 * go get a copy fo the node form for the 'daily_order' node type so we can
+	 * pluck out the supplies order pop up. This is an unconventional method but I expect
+	 * minimal effect on performance since this form is usually cached. The thinking here is
+	 * to keep the list of available items dynamic to what is defined through the cck
+	 * interface. So if anyone changes the field list for Supplies via the 
+	 * Structure/Content Types/[type]/Manage Fields interface the changes will be 
+	 * reflected here.
+	 */
+	
+	global $user;
+	$node = (object) array(
+		'uid' => $user->uid, 
+		'name' => (isset($user->name) ? $user->name : ''),
+		'type' => 'daily_order', 
+		'language' => LANGUAGE_NONE);
+ 	$form_state['build_info']['args'] = array($node);
+ 	$node_form = array ();
+ 	field_attach_form('node', $node, $node_form, $form_state);
+	//dsm ($node_form);
+	
+	$form['supplies'] = array (
+		'#type' => 'fieldset',
+		'#title' => 'Add supplies to this order',
+		'#collapsible' => true,
+		'#collapsed' => true,
+		'#tree' => true,
+	);
+	
+	$form['supplies']['supplies_order'] = $node_form['field_daily_order_supplies'];
+	
+	$form['submit'] = array(
+ 		'#type' => 'submit',
+ 		'#value' => t('submit')
+ 	);
+ 	
+	return $form;
+}
+
+/**
+ * schoolmeal_site_order_form_validate()
+ *
+ * Validate the district form entries
+ */
+function schoolmeal_site_order_form_validate($form, &$form_state) {
+	foreach ($form_state['input'] as $key => $value) {
+		$parts = explode('_', $key);
+		if ($parts[0] == 'order') {
+			if (preg_match("/^\d+$/", $value) == 0) {
+				form_set_error($key, t('Each entry must be a positive integer or a zero.'));
+			}
+		}
+	}
+}
+
+/**
+ * starts_with($haystack, $needle)
+ * We're going to use this for parsing key values
+ */
+function starts_with($haystack, $needle) {
+    $length = strlen($needle);
+    return (substr($haystack, 0, $length) === $needle);
+}
+
+/**
+ * schoolmeal_site_order_form_submit($form, &$form_state)
+ * 
+ * Now we pull the monkey bread apart to create all the little parts
+ * that make up a daily order.
+ * 
+ * Downstream we depend on a specific order of teacher -> count,
+ * teacher -> cctr, teacher -> prep, next_teacher -> count ...
+ * 
+ * Anything done here that might cause this order to shift
+ * would create problems downstream in sumary displays of this data.
+ * 
+ */
+function schoolmeal_site_order_form_submit ($form, &$form_state) {
+
+	// create a new master order for the school site
+	$site_node = new stdClass();
+	$site_node->type = 'daily_order';
+	node_object_prepare($site_node);
+	
+	// iccckkkk! using a CCK + node entity rather than custom one! what a twit!
+	$site_node->title = 'daily order - '.date('c').' - '.$form_state['input']['field_school_reference'];
+	$site_node->language = LANGUAGE_NONE;
+	$site_node->field_school_reference['und'][0]['nid'] = $form_state['input']['field_school_reference'];
+	$site_node->field_delivery_date = array (
+		'und' => array (
+			0 => array (
+				'value' => date('Y-m-d G:i:s', $form_state['input']['delivery_date']),
+				'timezone' => 'America/Los_Angeles',
+				'offset' =>  -28800,
+				'timezone_db' => 'UTC',
+				'date_type' => 'datetime'	
+			),
+		),	
+	);
+	$site_node->field_daily_order_supplies['und'] = $form_state['values']['supplies']['supplies_order']['und'];
+	node_save($site_node);
+	
+	/**
+	 * build a more flexible array from the submitted data
+	 * I considered doing this upstream, in the form array for example,
+	 * but that would have pushed similar loops in the theme thus not reducing complexity
+	 * 
+	 * Here is the key from above: $prefix = 'order_'.$nid.'_'.$name.'_'.$meal;
+	 * so currently 'array([teacher_id]_[teacher_name] => array([meal_name] => array ([meal_suffix] => [entry_value])))
+	 * ...or array('15_smith' => array ('brecky' => array ('count' => 15)))
+	 *       array('15_smith' => array ('brecky' => array ('cctr' => 5)))
+	 *       array('15_smith' => array ('brecky' => array ('prep' => 5)))
+	 *       array('15_smith' => array ('snack' => array ('count' => 5)))
+	 *       ...
+	 * 
+	 */
+	$input_array = array();
+	$count = 0;
+	foreach($form_state['input'] as $key => $value) {
+		if (starts_with ($key, 'order')) {
+			$parts = explode ("_", $key);		
+			$merge_array = array (
+				$parts[1].'_'.$parts[2] => array($parts[3] => array($parts[4] => $value)));		
+			$input_array = array_merge_recursive ($input_array, $merge_array);
+		}
+		
+	}
+	
+	/**
+	 * now we bear the fruits of our labor - don't do anything that 
+	 * messes with the order of these inputs
+	 */
+	foreach($input_array as $teacher_key => $order_array) {
+		$parts = explode('_', $teacher_key);
+		$teacher_nid = $parts[0];
+		foreach($order_array as $meal_key => $prep_array) {
+			$order_node = new stdClass();
+			$order_node->type = 'meal_order';
+			node_object_prepare($order_node);
+			$order_node->field_meal_teacher_id['und'][0]['value'] = $teacher_key;
+			$order_node->field_meal_type['und'][0]['value'] = $meal_key;
+			/**
+			 * thou shalt always have count, cctr & prep keys!
+			 * this is not flexible, and could be improved to provide an interface for
+			 * planting a an enumerated var in the system prefs, then looping thru those,
+			 * butt for now this works perfectly fine. Remember in Drupal, we sanitize
+			 * on they way out, not on the way in.
+			 */
+			$order_node->field_meal_count['und'][0]['value'] = $prep_array['count'];
+			$order_node->field_meal_cctr_count['und'][0]['value'] = $prep_array['cctr'];
+			$order_node->field_meal_special_prep_count['und'][0]['value'] = $prep_array['prep'];
+			$order_node->field_daily_order_id['und'][0]['nid'] = $site_node->nid;
+			
+			$order_node->field_meal_teacher_id['und'][0]['nid'] = $teacher_nid;
+			
+			/** here we pay for using a node based entity by storing useless data
+			    todo: replace this crap with a custom entity */
+			$order_node->title = $teacher_nid.' '.$meal_key;
+			$order_node->language = LANGUAGE_NONE;
+			node_save($order_node);			
+		}		
+	}
+}
+
+/**
+ * schoolmeal_site_supply_order_form()
+ * 
+ * Pops up in a modal over a daily order.
+ * 
+ */
+function schoolmeal_site_supply_order_form() {
+	$form = array();
+	return $form;
+}
+
+
+
+/**
+ * schoolmeal_district_order_summary()
+ * 
+ * Each site may only order once per day. If a site
+ * already ordered on any given day, this is what they
+ * get instead of another order form.
+ * 
+ */
+function schoolmeal_district_order_summary ($site_id, $daily_order_id) {
+	
+	$daily_order_node = node_load ($daily_order_id);
+	
+	// this hideous cluster-f#ck could be avoided with a custom entity
+	$query = db_select ('field_data_field_daily_order_id', 'order_id');	
+	$query->where ('field_daily_order_id_nid = :daily_order_id', array (':daily_order_id' => $daily_order_id));
+	$query->leftjoin ('field_data_field_meal_type', 'meal_type', 'meal_type.entity_id = order_id.entity_id');
+	$query->leftjoin ('field_data_field_meal_count', 'meal_count', 'meal_count.entity_id = order_id.entity_id');
+	$query->leftjoin ('field_data_field_meal_cctr_count', 'meal_cctr_count', 'meal_cctr_count.entity_id = order_id.entity_id');
+	$query->leftjoin ('field_data_field_meal_special_prep_count', 'meal_special_prep_count', 'meal_special_prep_count.entity_id = order_id.entity_id');
+	$query->leftjoin ('field_data_field_meal_teacher_id', 'meal_teacher_id', 'meal_teacher_id.entity_id = order_id.entity_id');
+	$query->leftjoin ('node', 'n', 'nid = meal_teacher_id.field_meal_teacher_id_nid');
+	
+	//$query->leftjoin ('n', 'daily_order', 'nid = order_id.entity_id');
+	
+	$query->leftjoin ('field_data_field_breakfast_max', 'breakfast_max', 'breakfast_max.entity_id = n.nid');
+	$query->leftjoin ('field_data_field_snack_max', 'snack_max', 'snack_max.entity_id = n.nid');
+	$query->leftjoin ('field_data_field_lunch_max', 'lunch_max', 'lunch_max.entity_id = n.nid');
+
+	$query->fields ('meal_type', array ('field_meal_type_value'));
+	$query->fields ('meal_count', array ('field_meal_count_value'));	
+	$query->fields ('meal_cctr_count', array ('field_meal_cctr_count_value'));
+	$query->fields ('meal_special_prep_count', array ('field_meal_special_prep_count_value'));
+	$query->fields ('meal_teacher_id', array ('field_meal_teacher_id_nid'));
+	$query->fields ('n', array ('title')); // the teacher's name
+	
+	// $query->fields ('daily_order', array ('field_daily_order_supplies_value'));
+	
+	$query->fields ('breakfast_max', array ('field_breakfast_max_value'));
+	$query->fields ('snack_max', array ('field_snack_max_value'));
+	$query->fields ('lunch_max', array ('field_lunch_max_value'));
+	
+	//$query->orderBy('field_data_field_meal_teacher_id', 'DESC');
+	
+	//$query->fields ('n', array ('nid'));
+	$result = $query->execute();
+	$rows = array ();
+	
+	$rows_test = array ( //#1
+		array ( 
+					array (
+						'data' => 'smith', //#2
+						),
+					array (
+						'data' => array (
+								'#theme' => 'table',
+								'#rows' => array ('data' => array ('count: 3', 'cctr: 6', 'prep: 2')),
+								'#header' => array ('Brecky','Max: 12'),
+							),
+					),
+					array (
+						'data' => array (
+								'#theme' => 'table',
+								'#rows' => array ('data' => array ('count: 3', 'cctr: 6', 'prep: 2')),
+								'#header' => array ('Snack','Max: 12'),
+							),
+					),
+					array (
+						'data' => array (
+								'#theme' => 'table',
+								'#rows' => array ('data' => array ('count: 3', 'cctr: 6', 'prep: 2')),
+								'#header' => array ('Lunch','Max: 12'),
+							),
+					),
+				),
+		array (
+					array (
+						'data' => 'Jones',
+						),
+					array (
+						'data' => array (
+								'#theme' => 'table',
+								'#rows' => array ('data' => array ('count: 3', 'cctr: 6', 'prep: 2')),
+								'#header' => array ('Brecky','Max: 12'),
+							),
+					),
+					array (
+						'data' => array (
+								'#theme' => 'table',
+								'#rows' => array ('data' => array ('count: 3', 'cctr: 6', 'prep: 2')),
+								'#header' => array ('Snack','Max: 12'),
+							),
+					),
+					array (
+						'data' => array (
+								'#theme' => 'table',
+								'#rows' => array ('data' => array ('count: 3', 'cctr: 6', 'prep: 2')),
+								'#header' => array ('Lunch','Max: 12'),
+							),
+					),
+				),
+	);
+	
+	$header = array (
+		array (
+			'data' => 'Teacher',
+		),
+		array (
+			'data' => 'Daily Order',
+			'colspan' => 3,
+		),
+	);
+	//dsm ($rows_test);
+
+	$rows = array ();
+	$teacher_id = null;
+	$row = array ();
+
+	foreach ($result as $row_data) {
+		if ($teacher_id <> $row_data->field_meal_teacher_id_nid) {
+			// new row!
+			$rows[] = $row;
+			$row = array (
+				array (
+					'data' => $row_data->title,
+				),
+			);
+			$teacher_id = $row_data->field_meal_teacher_id_nid;
+			// pewww - something smells like crap code!
+			$teacher_max_array = array (
+				'breakfast' => $row_data->field_breakfast_max_value,
+				'snack' => $row_data->field_snack_max_value,
+				'lunch' => $row_data->field_lunch_max_value,
+			);
+		}
+		$meal_type = $row_data->field_meal_type_value;
+		$count = $row_data->field_meal_count_value;
+		$cctr = $row_data->field_meal_cctr_count_value;
+		$prep = $row_data->field_meal_special_prep_count_value ;
+		$row[] = array (
+			'data' => array (
+				'#theme' => 'table',
+				'#rows' => array (
+					'data' => array ('count: '.$count, 'cctr: '.$cctr, 'prep: '.$prep),
+				),
+				'#header' => array ($meal_type,'Max: '.$teacher_max_array[$meal_type])
+			),
+		);
+	}
+	
+	$rows[] = $row; // catch the lst row through
+	
+	//$rows[] = array ('data' => field_view_field('node', $daily_order_node, 'field_daily_order_supplies', $display = array('Full')));
+	$rows[] = array (
+		'data' => array (
+			'data' => array (
+				'data' => field_view_field('node', $daily_order_node, 'field_daily_order_supplies', $display = array('Full')),
+				'colspan' => 4,
+				)
+			),
+	);
+	$render_table = array (
+		'#theme' => 'table',
+		'#header' => $header,
+		'#rows' => $rows, #1
+	);
+	
+	//dsm ();
+	
+	return $render_table;
+}
+/**
+ * schoolmeal_kitchen_summary()
+ *
+ * Present asummary of this day's orders fraom all sites.
+ * WIll be auto refreshed by the browser during busines hours.
+ */
+function schoolmeal_kitchen_summary() {
+	return 'this is the schoolmeal_kitchen_summary function.';
+}
+
+/**
+ * schoolmeal_can_site_order()
+ * 
+ * Each site may only order once per day. 
+ * Has this site already ordered today?
+ * 
+ */
+function schoolmeal_can_site_order() {
+	return TRUE;
+}
+
+/**********************************************************************************/
+/* Custom Filed for menu */
+
+/* Implementation of hook_field_info ()
+ *
+ * We will need a composit field for the daily menu record.
+ *
+ */
+function schoolmeal_field_info() {
+	return array(
+		'schoolmeal_menu_rows' => array(
+		  'label' => t('Menu row'),
+		  'description' => t("The columns of this composite field make up a single row of the menu on a tranpsport sheet."),
+		  'settings' => array('allowed_values' => array(), 'allowed_values_function' => ''),
+		  'default_widget' => 'schoolmeal_menu_row',
+		  'default_formatter' => 'schoolmeal_menu_row_format', // This doesn't *have* to be the same name as default_widget's value, this is only coincidence
+		),
+    );
+}
+
+
+?>

@@ -1,0 +1,67 @@
+#edit-supplies-supplies-order-und .form-type-checkbox, #edit-supplies-supplies-order-und--2 .form-type-checkbox {
+  float: left;
+  width: 20%;
+}
+
+#quicktabs-site_orders {
+	/*font-size: 1.2em;*/
+}
+
+#quicktabs-site_orders ul {
+	margin-bottom: .3846em;
+}
+
+#quicktabs-site_orders ul li {
+	border-left: 1px solid #ccc;
+	border-right: 1px solid #ccc;
+	border-top: 1px solid #ccc;
+	webkit-border-top-left-radius: 7px;
+	-webkit-border-top-right-radius: 7px;
+	-moz-border-radius-topleft: 7px;
+	-moz-border-radius-topright: 7px;
+	border-top-left-radius: 7px;
+	border-top-right-radius: 7px;
+	padding: .6em 2em;
+	margin-bottom: 0;
+	margin-left: 1em;
+}
+
+#quicktabs-site_orders ul li.first {
+	margin-left: .0769em;
+}
+
+#quicktabs-site_orders ul li a {
+	text-decoration: none;
+}
+
+#quicktabs-site_orders ul li.active {
+	/*background: #8aa00f;*/
+}
+
+/*
+#quicktabs-site_orders ul li.active a {
+		color: white;
+}
+*/
+
+#quicktabs-site_orders table {
+	margin-top: 0;
+}
+
+#quicktabs-tabpage-site_orders-0 table tr th {
+	/*background: #8aa00f; *//*#757575;*/
+	/*background: rgba(0, 0, 0, 0.51);*/
+	border-bottom-style: none;
+}
+
+#quicktabs-tabpage-site_orders-0 tr.odd {
+/*
+background: #CEDF63;
+*/
+/*background: rgba(0, 0, 0, 0.105);*/
+}
+
+#quicktabs-tabpage-site_orders-0 tr, tr.even {
+/*background: #EBF49A;*/
+/*background: rgba(0, 0, 0, 0.063);*/
+}

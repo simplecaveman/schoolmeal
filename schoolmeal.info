@@ -1,0 +1,7 @@
+name = KCSOS Central Kitchen Apps
+description = Custom code to support applications for the KCSOS Central Kitchen.
+package = KCSOS
+core = 7.x
+
+dependencies[] = entity
+
