@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the schoolmeal features feature.
+ */
+
+include_once 'schoolmeal_features.features.inc';
